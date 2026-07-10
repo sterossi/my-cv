@@ -414,6 +414,93 @@
     white-space:nowrap;
   }
 
+  /* ---------------- SKILLS SPIDER ---------------- */
+  .spider-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:24px;
+  }
+  .spider-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:24px 20px 20px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:12px;
+  }
+  /* 4th and 5th cards centred in a 2-col row */
+  .spider-card:nth-child(4){
+    grid-column:1 / span 1;
+    /* pushed right via grid auto-flow — handled with wrapper below */
+  }
+  .spider-bottom-row{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:24px;
+    /* centre the 2-card row within a 3-col parent */
+    grid-column:1 / -1;
+    max-width: calc(66.666% - 8px);
+    margin:0 auto;
+    width:100%;
+  }
+  .spider-card-title{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px;
+    letter-spacing:0.10em;
+    text-transform:uppercase;
+    text-align:center;
+    line-height:1.4;
+  }
+  .spider-canvas-wrap{
+    position:relative;
+    width:100%;
+  }
+  .spider-canvas-wrap canvas{
+    display:block;
+    width:100%;
+    height:auto;
+  }
+  .spider-tooltip{
+    position:fixed;
+    z-index:100;
+    background:var(--surface-alt);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px 13px;
+    max-width:240px;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity 0.12s ease;
+    box-shadow:0 8px 24px rgba(0,0,0,0.45);
+  }
+  .spider-tooltip.visible{opacity:1;}
+  .spider-tooltip-name{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    font-weight:600;
+    margin-bottom:4px;
+  }
+  .spider-tooltip-score{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    margin-bottom:6px;
+    opacity:0.6;
+  }
+  .spider-tooltip-desc{
+    font-size:13px;
+    color:var(--text-muted);
+    line-height:1.45;
+  }
+  @media (max-width:780px){
+    .spider-grid{grid-template-columns:1fr;}
+    .spider-bottom-row{
+      grid-template-columns:1fr;
+      max-width:100%;
+    }
+  }
+
   /* ---------------- FOOTER ---------------- */
   footer{
     padding:40px 0 64px;
@@ -531,11 +618,33 @@
   </div>
 </section>
 
+<section id="skills">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="section-title">02 — <b>My Skills</b></div>
+        <h2>Mapped across five domains</h2>
+      </div>
+      <p class="section-sub">Hover any point to see what each skill means in practice. Scores reflect honest self-assessment from 1 to 5.</p>
+    </div>
+
+    <div class="spider-grid" id="spider-grid">
+      <!-- injected by JS -->
+    </div>
+  </div>
+</section>
+
+<div class="spider-tooltip" id="spider-tooltip">
+  <div class="spider-tooltip-name" id="stt-name"></div>
+  <div class="spider-tooltip-score" id="stt-score"></div>
+  <div class="spider-tooltip-desc" id="stt-desc"></div>
+</div>
+
 <section id="timeline">
   <div class="wrap">
     <div class="section-head">
       <div>
-        <div class="section-title">02 — <b>Timeline</b></div>
+        <div class="section-title">03 — <b>Timeline</b></div>
         <h2>Career, mapped like a pipeline</h2>
       </div>
       <div class="legend">
@@ -657,5 +766,326 @@
   </div>
 </footer>
 
+<script>
+(function(){
+  /* ── palette mirrors CSS custom properties ── */
+  const PALETTE = {
+    bg:        '#12151A',
+    surface:   '#1B1F27',
+    surfaceAlt:'#21262F',
+    border:    '#2A2F3A',
+    text:      '#EDEFF2',
+    muted:     '#8A93A3',
+    faint:     '#5B6472',
+    teal:      '#52D6C6',
+    amber:     '#F2B84B',
+    violet:    '#B69CF7',
+  };
+
+  const CATEGORY_COLOR = {
+    'Core Transformation & Programming':   PALETTE.teal,
+    'Architectural Data Modeling':         PALETTE.violet,
+    'Data Engineering-Adjacent Skills':    PALETTE.amber,
+    'Data Visualization-Adjacent Skills':  '#E07BB5',   /* soft rose — distinct from the 3 main accents */
+    'Strategy & Operations':               '#6EC6F5',   /* sky blue */
+  };
+
+  const CATEGORY_ORDER = [
+    'Core Transformation & Programming',
+    'Architectural Data Modeling',
+    'Data Engineering-Adjacent Skills',
+    'Data Visualization-Adjacent Skills',
+    'Strategy & Operations',
+  ];
+
+  const MAX_SCORE = 5;
+  const DOT_RADIUS = 5;
+  const HIT_RADIUS = 18;  /* px, generously tappable */
+
+  /* ── CSV parse ── */
+  function parseCSV(text){
+    const rows = text.trim().split('\n').slice(1); /* skip header */
+    return rows.map(row => {
+      /* handle commas inside fields (simple split — no quoted commas in this CSV) */
+      const cols = row.split(',');
+      return {
+        category:    cols[0].trim(),
+        skillName:   cols[1].trim(),
+        score:       parseInt(cols[2].trim(), 10),
+        description: cols.slice(3).join(',').trim(),
+      };
+    }).filter(r => r.category && r.skillName);
+  }
+
+  /* ── group by category ── */
+  function groupBy(skills){
+    const map = {};
+    for(const s of skills){
+      if(!map[s.category]) map[s.category] = [];
+      map[s.category].push(s);
+    }
+    return map;
+  }
+
+  /* ── tooltip ── */
+  const tooltip   = document.getElementById('spider-tooltip');
+  const sttName   = document.getElementById('stt-name');
+  const sttScore  = document.getElementById('stt-score');
+  const sttDesc   = document.getElementById('stt-desc');
+
+  function showTooltip(skill, mouseX, mouseY){
+    sttName.textContent  = skill.skillName;
+    sttScore.textContent = '▪'.repeat(skill.score) + '▫'.repeat(MAX_SCORE - skill.score) + '  ' + skill.score + ' / ' + MAX_SCORE;
+    sttDesc.textContent  = skill.description;
+    tooltip.classList.add('visible');
+    positionTooltip(mouseX, mouseY);
+  }
+  function hideTooltip(){
+    tooltip.classList.remove('visible');
+  }
+  function positionTooltip(mx, my){
+    const tw = tooltip.offsetWidth  || 240;
+    const th = tooltip.offsetHeight || 90;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x = mx + 16;
+    let y = my + 16;
+    if(x + tw > vw - 12) x = mx - tw - 12;
+    if(y + th > vh - 12) y = my - th - 12;
+    tooltip.style.left = x + 'px';
+    tooltip.style.top  = y + 'px';
+  }
+
+  /* ── draw one spider chart ── */
+  function drawSpider(canvas, skills, color){
+    const dpr  = window.devicePixelRatio || 1;
+    const size = canvas.clientWidth;
+    canvas.width  = size * dpr;
+    canvas.height = size * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const cx   = size / 2;
+    const cy   = size / 2;
+    const n    = skills.length;
+    const R    = size * 0.36;   /* outer ring radius */
+    const angleStep = (Math.PI * 2) / n;
+    const startAngle = -Math.PI / 2; /* top */
+
+    function polarPoint(i, r){
+      const a = startAngle + i * angleStep;
+      return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+    }
+
+    /* grid rings */
+    for(let ring = 1; ring <= MAX_SCORE; ring++){
+      const r = (ring / MAX_SCORE) * R;
+      ctx.beginPath();
+      for(let i = 0; i < n; i++){
+        const p = polarPoint(i, r);
+        i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = ring === MAX_SCORE ? PALETTE.border : 'rgba(255,255,255,0.06)';
+      ctx.lineWidth   = ring === MAX_SCORE ? 1.2 : 0.8;
+      ctx.stroke();
+    }
+
+    /* axis spokes */
+    for(let i = 0; i < n; i++){
+      const outer = polarPoint(i, R);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(outer.x, outer.y);
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth   = 1;
+      ctx.stroke();
+    }
+
+    /* skill polygon */
+    ctx.beginPath();
+    for(let i = 0; i < n; i++){
+      const r = (skills[i].score / MAX_SCORE) * R;
+      const p = polarPoint(i, r);
+      i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle   = color + '22';  /* ~13% opacity fill */
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.8;
+    ctx.lineJoin    = 'round';
+    ctx.stroke();
+
+    /* axis labels */
+    ctx.font         = `500 10.5px "IBM Plex Mono", monospace`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle    = PALETTE.muted;
+
+    const LABEL_PADDING = 14;
+    for(let i = 0; i < n; i++){
+      const a    = startAngle + i * angleStep;
+      const lp   = polarPoint(i, R + LABEL_PADDING);
+      const name = skills[i].skillName;
+
+      /* multi-line wrapping for long names */
+      const words = name.split(' ');
+      const lines = [];
+      let current = '';
+      const maxW  = 80;
+      for(const w of words){
+        const test = current ? current + ' ' + w : w;
+        if(ctx.measureText(test).width > maxW && current){
+          lines.push(current);
+          current = w;
+        } else {
+          current = test;
+        }
+      }
+      if(current) lines.push(current);
+
+      /* nudge label outward for top/bottom so it doesn't clip */
+      const extraY = (Math.abs(Math.sin(a)) > 0.7) ? (Math.sin(a) > 0 ? 5 : -5) : 0;
+      const lineH  = 13;
+      const startY = lp.y + extraY - ((lines.length - 1) * lineH) / 2;
+      lines.forEach((line, li) => {
+        ctx.fillText(line, lp.x, startY + li * lineH);
+      });
+    }
+
+    /* score dots */
+    for(let i = 0; i < n; i++){
+      const r = (skills[i].score / MAX_SCORE) * R;
+      const p = polarPoint(i, r);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle   = color;
+      ctx.fill();
+      ctx.strokeStyle = PALETTE.bg;
+      ctx.lineWidth   = 1.5;
+      ctx.stroke();
+    }
+
+    /* return point positions for hit-testing */
+    return skills.map((s, i) => {
+      const r = (s.score / MAX_SCORE) * R;
+      const p = polarPoint(i, r);
+      return { x: p.x, y: p.y, skill: s };
+    });
+  }
+
+  /* ── build card DOM + wire events ── */
+  function buildCard(category, skills, color){
+    const card = document.createElement('div');
+    card.className = 'spider-card';
+
+    const title = document.createElement('div');
+    title.className = 'spider-card-title';
+    title.style.color = color;
+    title.textContent = category;
+    card.appendChild(title);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'spider-canvas-wrap';
+
+    const canvas = document.createElement('canvas');
+    /* intrinsic aspect ratio — square */
+    canvas.style.cssText = 'width:100%;aspect-ratio:1;display:block;';
+    wrap.appendChild(canvas);
+    card.appendChild(wrap);
+
+    let points = [];
+
+    function redraw(){
+      /* force clientWidth to resolve */
+      requestAnimationFrame(() => {
+        if(!canvas.clientWidth) return;
+        points = drawSpider(canvas, skills, color);
+      });
+    }
+
+    /* draw after layout */
+    const ro = new ResizeObserver(redraw);
+    ro.observe(canvas);
+
+    /* hit-test helpers */
+    function canvasPoint(e){
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width  / (rect.width  * (window.devicePixelRatio||1));
+      const scaleY = canvas.height / (rect.height * (window.devicePixelRatio||1));
+      /* canvas CSS px coords */
+      return {
+        x: (e.clientX - rect.left),
+        y: (e.clientY - rect.top),
+      };
+    }
+
+    function findHit(cp){
+      for(const pt of points){
+        const dx = cp.x - pt.x;
+        const dy = cp.y - pt.y;
+        if(Math.sqrt(dx*dx + dy*dy) <= HIT_RADIUS) return pt.skill;
+      }
+      return null;
+    }
+
+    canvas.addEventListener('mousemove', e => {
+      const cp  = canvasPoint(e);
+      const hit = findHit(cp);
+      if(hit){
+        canvas.style.cursor = 'crosshair';
+        showTooltip(hit, e.clientX, e.clientY);
+      } else {
+        canvas.style.cursor = '';
+        hideTooltip();
+      }
+    });
+    canvas.addEventListener('mouseleave', hideTooltip);
+
+    /* touch */
+    canvas.addEventListener('touchstart', e => {
+      const t   = e.touches[0];
+      const cp  = canvasPoint(t);
+      const hit = findHit(cp);
+      if(hit){ showTooltip(hit, t.clientX, t.clientY); e.preventDefault(); }
+    }, {passive:false});
+    canvas.addEventListener('touchend', () => setTimeout(hideTooltip, 1800));
+
+    return card;
+  }
+
+  /* ── main: fetch CSV → render ── */
+  async function init(){
+    const resp = await fetch('my skills.csv');
+    if(!resp.ok){ console.error('Could not load my skills.csv'); return; }
+    const text   = await resp.text();
+    const skills = parseCSV(text);
+    const groups = groupBy(skills);
+    const grid   = document.getElementById('spider-grid');
+
+    const top3 = CATEGORY_ORDER.slice(0, 3);
+    const bot2 = CATEGORY_ORDER.slice(3, 5);
+
+    for(const cat of top3){
+      if(!groups[cat]) continue;
+      const color = CATEGORY_COLOR[cat] || PALETTE.teal;
+      grid.appendChild(buildCard(cat, groups[cat], color));
+    }
+
+    /* bottom row — centred 2-card row */
+    const bottomRow = document.createElement('div');
+    bottomRow.className = 'spider-bottom-row';
+    for(const cat of bot2){
+      if(!groups[cat]) continue;
+      const color = CATEGORY_COLOR[cat] || PALETTE.teal;
+      bottomRow.appendChild(buildCard(cat, groups[cat], color));
+    }
+    grid.appendChild(bottomRow);
+  }
+
+  init().catch(console.error);
+})();
+</script>
 </body>
 </html>
