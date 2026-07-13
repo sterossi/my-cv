@@ -11,11 +11,3 @@ Data Engineering-Adjacent Skills,Data Ingestion & ELT,2,Understanding how data l
 Data Engineering-Adjacent Skills,CI/CD,2,Setting up automated testing and deployment workflows (e.g. GitHub Actions) so code changes do not break production.
 Data Engineering-Adjacent Skills,Data Quality & Observability,3,Implementing assertion testing (schema uniqueness null values) and monitoring pipeline health with tools like Monte Carlo.
 Data Engineering-Adjacent Skills,Performance & Cost Optimization,4,Profiling query execution plans cluster scaling laws and storage partitioning to keep cloud warehouse bills under control.
-Data Visualization-Adjacent Skills,BI Architecture & Governance,3,Setting up business intelligence environments (Looker Tableau Power BI) managing connections permissions and extracts cleanly.
-Data Visualization-Adjacent Skills,Dashboard Performance,3,Structuring underlying warehouse tables (materialized views aggregate tables) specifically to ensure BI dashboards load instantly.
-Data Visualization-Adjacent Skills,Reverse ETL,4,Pushing transformed data out of the warehouse back into operational tools (Salesforce HubSpot Zendesk) using Hightouch or Census.
-Data Visualization-Adjacent Skills,Data Storytelling & UX,4,Designing clean intuitive visual hierarchies in dashboards so business stakeholders can find answers without training.
-Strategy & Operations,Data Governance,4,Implementing data dictionaries column-level lineage tracking and tag-based masking rules to ensure compliance (GDPR/CCPA).
-Strategy & Operations,Agile Data Operations,2,Applying software engineering practices (sprints documentation-as-code technical debt management) to data team workflows.
-Strategy & Operations,Stakeholder Management,4,Serving as the bridge between raw engineering constraints and ambiguous business questions to define clear data product requirements.
-Strategy & Operations,Verbal Communication,3,Serving as the bridge between raw engineering constraints and ambiguous business questions to define clear data product requirements.
